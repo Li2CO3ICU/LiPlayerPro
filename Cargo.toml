@@ -7,8 +7,10 @@ strip = "symbols"
 
 [package]
 name = "LiPlayerPro"
-version = "0.1.0"
 edition = "2024"
+version = "0.1.0"
+authors = ["Li2CO3ICU"]
+license = "AGPL-3.0-only"
 
 [dependencies]
 alsa = "0.7"
