@@ -1,5 +1,5 @@
 #![allow(dead_code, unused_variables)]
-use alsa::{Direction, ValueOr, device_name};
+use alsa::{Direction, ValueOr};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use ringbuf::HeapRb;
 use std::io::Read;
