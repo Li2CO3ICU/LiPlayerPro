@@ -1,0 +1,29 @@
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[package]
+name = "LiPlayerPro"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alsa = "0.7"
+ringbuf = "0.3"
+crossbeam-channel = "0.5"
+crossterm = "0.27"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+serde_json = "1.0"
+tantivy = "0.22"
+walkdir = "2"
+rayon = "1.8"
+unicode-width = "0.1"
+ratatui = "0.26"
+fuzzy-matcher = "0.3"
+souvlaki = "0.7"
+shellexpand = "3.1.0"
+notify = "6.1.1"
