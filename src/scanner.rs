@@ -9,6 +9,7 @@ pub struct TrackMeta {
     pub title: String,
     pub artist: String,
     pub album: String,
+    pub genre: String,
     pub sample_rate: u32,
     pub format: String,
     pub duration: u64,
@@ -90,7 +91,6 @@ pub fn scan_track(path: &str) -> Option<TrackMeta> {
         v.as_u64().map(|n| n as u32).or_else(|| v.as_str().and_then(|s| s.parse().ok()))
     };
 
-    // 先找 bits_per_raw_sample (防 FLAC/ALAC 陷阱)，再找 bits_per_sample，过滤掉为 0 的无效值
     let bit_depth = parse_u32(&audio_stream["bits_per_raw_sample"])
         .or_else(|| parse_u32(&audio_stream["bits_per_sample"]))
         .filter(|&v| v > 0)
@@ -100,22 +100,19 @@ pub fn scan_track(path: &str) -> Option<TrackMeta> {
     let mut final_sample_rate = sample_rate;
     let mut final_bit_depth = bit_depth;
 
-    if format.starts_with("dsd_") {
-        if bit_depth == 8 {
-            final_sample_rate = sample_rate * 8; // 例如 352800 * 8 = 2822400
-            final_bit_depth = 1;                 // 永远纯粹的 1-bit
-        }
+    if format.starts_with("dsd_") && bit_depth == 8 {
+        final_sample_rate = sample_rate * 8; 
+        final_bit_depth = 1;
     }
-
     Some(TrackMeta {
         path: path.to_string(),
         title: get_tag("title").unwrap_or(file_stem),
-        artist: get_tag("artist").unwrap_or_else(|| "Unknown".to_string()),
-        album: get_tag("album").unwrap_or_else(|| "Unknown".to_string()),
+        artist: get_tag("artist").unwrap_or_else(|| "Unknown Artist".to_string()),
+        album: get_tag("album").unwrap_or_else(|| "Unknown Album".to_string()),
+        genre: get_tag("genre").unwrap_or_else(|| "Unknown Genre".to_string()),
         sample_rate: final_sample_rate,
         format,
-        duration, 
+        duration,
         bit_rate,  
-        bit_depth: final_bit_depth,
-    })
+        bit_depth: final_bit_depth,    })
 }
