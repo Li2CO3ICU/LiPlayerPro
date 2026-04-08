@@ -339,6 +339,7 @@ impl App {
     }
 
     fn handle_enter(&mut self) {
+        let old_len = self.view_stack.len();
         let idx = self.sidebar_state.selected().unwrap_or(0);
         if self.items.is_empty() { return; }
         let cur_view = self.view_stack.last().unwrap().clone();
@@ -387,6 +388,9 @@ impl App {
                 self.play_track_at(idx);
             }
             _ => {}
+        }
+        if self.view_stack.len() > old_len {
+            self.sidebar_state.select(Some(0));
         }
     }
 }
