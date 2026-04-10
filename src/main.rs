@@ -7,14 +7,15 @@
 //
 // -----------------------------------------------------------------------
 
+mod app;
 mod audio_engine;
+mod config;
 mod library;
 mod scanner;
-mod watcher;
+mod theme;
 mod types;
-mod config;
-mod app;
 mod ui;
+mod watcher;
 
 use std::{io, sync::{mpsc, Arc}, time::Duration};
 use crossterm::{
