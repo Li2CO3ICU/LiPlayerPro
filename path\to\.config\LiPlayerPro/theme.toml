@@ -1,0 +1,18 @@
+[colors]
+background = "#b3c5ff"
+
+primary = "#b3c5ff"
+
+secondary = "#b3c5ff"
+
+border_active = "#0053d9"
+
+sidebar_header_bg = "#24283b"
+
+progress_bar = "#b3c5ff"
+
+lyric_past = "#c5c3ea"
+
+lyric_present = "#0053d9"
+
+lyric_future = "#b3c5ff"

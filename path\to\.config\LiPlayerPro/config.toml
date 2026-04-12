@@ -1,0 +1,9 @@
+[library]
+music_dir = "~/Music"
+index_path = "~/.config/LiPlayerPro/index"
+
+[audio]
+device = "hw:2,0"
+
+[ui]
+fps = 60

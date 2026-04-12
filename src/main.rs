@@ -54,14 +54,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let track_count = library.get_track_count();
 
     if track_count == 0 {
-        let tx_clone = tx.clone();
-        let lib_clone = Arc::clone(&library);
-        std::thread::spawn(move || {
-            lib_clone.build_index("/home/Li2CO3/Music/", tx_clone);
-        });
-    } else {
-        let _ = tx.send(AppEvent::ScanFinished);
-    }
+    let tx_clone = tx.clone();
+    let lib_clone = Arc::clone(&library);
+
+    let home = std::env::var("HOME").expect("Failed to get HOME directory");
+    
+    let music_path = std::path::PathBuf::from(home)
+        .join("Music")
+        .to_string_lossy() 
+        .into_owned();
+
+    std::thread::spawn(move || {
+        lib_clone.build_index(&music_path, tx_clone);
+    });
+} else {
+    let _ = tx.send(AppEvent::ScanFinished);
+}
 
     let mut app = App::new(engine, library, config.ui, mpris_tx, mpris_rx);
 

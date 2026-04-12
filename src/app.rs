@@ -398,7 +398,7 @@ impl App {
             }
             _ => {}
         }
-        if self.view_stack.len() > old_len {
+        if self.view_stack.len() != old_len {
             self.sidebar_state.select(Some(0));
         }
     }
