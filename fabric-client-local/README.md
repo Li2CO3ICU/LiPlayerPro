@@ -10,7 +10,10 @@
 
 ## 对接步骤
 
-1. 在 Fabric 客户端初始化时加载 native 动态库（`liplayerpro_core`）。
+1. 在 Fabric 客户端初始化时加载 native 动态库：
+   - Linux: `libliplayerpro_core.so`
+   - Windows: `liplayerpro_core.dll`
+   - macOS: `libliplayerpro_core.dylib`
 2. 创建播放器句柄并调用 `liplayer_scan_local_library` 扫描本地音乐目录。
 3. 通过命令/按键/HUD 操作调用：
    - `liplayer_play_track_at`

@@ -16,8 +16,18 @@ license = "AGPL-3.0-only"
 name = "liplayerpro_core"
 crate-type = ["rlib", "cdylib"]
 
+[features]
+default = ["tui-app", "native-alsa"]
+tui-app = ["dep:souvlaki", "native-alsa"]
+native-alsa = ["dep:alsa"]
+
+[[bin]]
+name = "LiPlayerPro"
+path = "src/main.rs"
+required-features = ["tui-app"]
+
 [dependencies]
-alsa = "0.7"
+alsa = { version = "0.7", optional = true }
 ringbuf = "0.3"
 crossbeam-channel = "0.5"
 crossterm = "0.27"
@@ -30,6 +40,6 @@ rayon = "1.8"
 unicode-width = "0.1"
 ratatui = "0.26"
 fuzzy-matcher = "0.3"
-souvlaki = "0.7"
+souvlaki = { version = "0.7", optional = true }
 shellexpand = "3.1.0"
 notify = "6.1.1"

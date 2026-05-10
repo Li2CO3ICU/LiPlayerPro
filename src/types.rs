@@ -41,8 +41,8 @@ pub struct DisplayItem {
 pub enum View {
     Home,
     AllTracks,
-    CategoriesMenu,                     // 🌟 1级：分类大菜单 (显示6个分类项)
-    CategoryList(Categories),           // 🌟 2级：分类数据层 (例如：具体的歌手名字列表)
+    CategoriesMenu,           // 🌟 1级：分类大菜单 (显示6个分类项)
+    CategoryList(Categories), // 🌟 2级：分类数据层 (例如：具体的歌手名字列表)
     CategoryTracks(Categories, String),
     SettingsMenu,
     SettingsDetail(Settings),

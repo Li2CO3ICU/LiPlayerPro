@@ -1,8 +1,10 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_ulonglong};
 use std::ptr::null_mut;
+use std::sync::Mutex;
 
 use crate::player_core::{PlayerCore, PlayerState};
+type PlayerHandle = Mutex<PlayerCore>;
 
 const OK: c_int = 0;
 const ERR_NULL: c_int = -1;
@@ -23,7 +25,7 @@ pub extern "C" fn liplayer_create(
     device_name: *const c_char,
     music_dir: *const c_char,
     index_path: *const c_char,
-) -> *mut PlayerCore {
+) -> *mut PlayerHandle {
     let device_name = match cstr_to_string(device_name) {
         Ok(v) => v,
         Err(_) => return null_mut(),
@@ -36,15 +38,15 @@ pub extern "C" fn liplayer_create(
         Ok(v) => v,
         Err(_) => return null_mut(),
     };
-    Box::into_raw(Box::new(PlayerCore::new(
+    Box::into_raw(Box::new(Mutex::new(PlayerCore::new(
         &device_name,
         &music_dir,
         &index_path,
-    )))
+    ))))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_destroy(handle: *mut PlayerCore) {
+pub extern "C" fn liplayer_destroy(handle: *mut PlayerHandle) {
     if handle.is_null() {
         return;
     }
@@ -56,7 +58,7 @@ pub extern "C" fn liplayer_destroy(handle: *mut PlayerCore) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn liplayer_scan_local_library(
-    handle: *mut PlayerCore,
+    handle: *mut PlayerHandle,
     music_dir: *const c_char,
 ) -> c_int {
     if handle.is_null() {
@@ -67,30 +69,37 @@ pub extern "C" fn liplayer_scan_local_library(
         Err(code) => return code,
     };
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    core.scan_local_library(&music_dir);
+    let core = unsafe { &*handle };
+    if let Ok(core) = core.lock() {
+        core.scan_local_library(&music_dir);
+    } else {
+        return ERR_OP;
+    }
     OK
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_track_count(handle: *mut PlayerCore) -> usize {
+pub extern "C" fn liplayer_track_count(handle: *mut PlayerHandle) -> usize {
     if handle.is_null() {
         return 0;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    core.list_tracks().len()
+    let core = unsafe { &*handle };
+    core.lock().map(|c| c.list_tracks().len()).unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_list_tracks_json(handle: *mut PlayerCore) -> *mut c_char {
+pub extern "C" fn liplayer_list_tracks_json(handle: *mut PlayerHandle) -> *mut c_char {
     if handle.is_null() {
         return null_mut();
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    let tracks = core.list_tracks();
-    let json = match serde_json::to_string(&tracks.iter().map(|t| &t.path).collect::<Vec<_>>()) {
+    let core = unsafe { &*handle };
+    let tracks = match core.lock() {
+        Ok(c) => c.list_tracks(),
+        Err(_) => return null_mut(),
+    };
+    let json = match serde_json::to_string(&tracks) {
         Ok(v) => v,
         Err(_) => return null_mut(),
     };
@@ -112,69 +121,87 @@ pub extern "C" fn liplayer_string_free(s: *mut c_char) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_play_track_at(handle: *mut PlayerCore, index: usize) -> c_int {
+pub extern "C" fn liplayer_play_track_at(handle: *mut PlayerHandle, index: usize) -> c_int {
     if handle.is_null() {
         return ERR_NULL;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    match core.play_track_at(index) {
-        Ok(()) => OK,
+    let core = unsafe { &*handle };
+    match core.lock() {
+        Ok(mut c) => c.play_track_at(index).map(|_| OK).unwrap_or(ERR_OP),
         Err(_) => ERR_OP,
     }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_stop(handle: *mut PlayerCore) -> c_int {
+pub extern "C" fn liplayer_stop(handle: *mut PlayerHandle) -> c_int {
     if handle.is_null() {
         return ERR_NULL;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    core.stop();
-    OK
+    let core = unsafe { &*handle };
+    if let Ok(mut c) = core.lock() {
+        c.stop();
+        OK
+    } else {
+        ERR_OP
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_pause(handle: *mut PlayerCore) -> c_int {
+pub extern "C" fn liplayer_pause(handle: *mut PlayerHandle) -> c_int {
     if handle.is_null() {
         return ERR_NULL;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    core.pause();
-    OK
+    let core = unsafe { &*handle };
+    if let Ok(mut c) = core.lock() {
+        c.pause();
+        OK
+    } else {
+        ERR_OP
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_resume(handle: *mut PlayerCore) -> c_int {
+pub extern "C" fn liplayer_resume(handle: *mut PlayerHandle) -> c_int {
     if handle.is_null() {
         return ERR_NULL;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    core.resume();
-    OK
+    let core = unsafe { &*handle };
+    if let Ok(mut c) = core.lock() {
+        c.resume();
+        OK
+    } else {
+        ERR_OP
+    }
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_elapsed_millis(handle: *mut PlayerCore) -> c_ulonglong {
+pub extern "C" fn liplayer_elapsed_millis(handle: *mut PlayerHandle) -> c_ulonglong {
     if handle.is_null() {
         return 0;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    core.elapsed_millis() as c_ulonglong
+    let core = unsafe { &*handle };
+    core.lock()
+        .map(|c| c.elapsed_millis() as c_ulonglong)
+        .unwrap_or(0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn liplayer_state(handle: *mut PlayerCore) -> c_int {
+pub extern "C" fn liplayer_state(handle: *mut PlayerHandle) -> c_int {
     if handle.is_null() {
         return ERR_NULL;
     }
     // SAFETY: handle is checked for null and points to a valid PlayerCore by API contract.
-    let core = unsafe { &mut *handle };
-    match core.state() {
+    let core = unsafe { &*handle };
+    let state = match core.lock() {
+        Ok(c) => c.state(),
+        Err(_) => return ERR_OP,
+    };
+    match state {
         PlayerState::Idle => 0,
         PlayerState::Playing => 1,
         PlayerState::Paused => 2,

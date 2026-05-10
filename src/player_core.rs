@@ -1,4 +1,4 @@
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 
 use crate::{
     audio_engine::AudioEngine,

@@ -8,22 +8,22 @@
 // -----------------------------------------------------------------------
 
 #![allow(unused_imports, dead_code)]
-use crate::types::TrackInfo;
 use crate::config::LibraryConfig;
 use crate::scanner::scan_track;
 use crate::types::AppEvent;
+use crate::types::TrackInfo;
 use rayon::prelude::*;
-use tantivy::time::format_description::well_known::iso8601::Config;
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
-use std::path::Path;
-use tantivy::directory::{self, MmapDirectory};
-use tantivy::schema::*;
 use tantivy::collector::TopDocs;
+use tantivy::directory::{self, MmapDirectory};
 use tantivy::query::AllQuery;
+use tantivy::schema::*;
 use tantivy::schema::{
     IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value, STORED, STRING,
 };
+use tantivy::time::format_description::well_known::iso8601::Config;
 use tantivy::tokenizer::{LowerCaser, NgramTokenizer, TextAnalyzer};
 use tantivy::{Index, IndexReader, IndexWriter, TantivyDocument};
 use walkdir::WalkDir;
@@ -36,22 +36,21 @@ pub struct MusicLibrary {
     f_album: Field,
     f_genre: Field,
     f_path: tantivy::schema::Field,
-    f_duration: tantivy::schema::Field,    
+    f_duration: tantivy::schema::Field,
     f_sample_rate: tantivy::schema::Field,
     f_bit_rate: tantivy::schema::Field,
-    f_bit_depth:tantivy::schema::Field,
+    f_bit_depth: tantivy::schema::Field,
     pub tracks: Arc<RwLock<Vec<TrackInfo>>>,
 }
 
 impl MusicLibrary {
     pub fn new(config: &LibraryConfig) -> Self {
-
         let index_path = Path::new(&config.index_path);
 
         std::fs::create_dir_all(&index_path).expect("创建目录失败喵...");
 
         let mut schema_builder = Schema::builder();
-        
+
         let cjk_text_options = TextOptions::default()
             .set_indexing_options(
                 TextFieldIndexing::default()
@@ -70,7 +69,7 @@ impl MusicLibrary {
         let f_bit_rate = schema_builder.add_u64_field("bit_rate", STORED);
         let f_bit_depth = schema_builder.add_u64_field("bit_depth", STORED);
         let schema = schema_builder.build();
-        
+
         let directory = MmapDirectory::open(&index_path).expect("打不开索引目录喵");
         let index = Index::open_or_create(directory, schema).expect("索引初始化失败喵");
 
@@ -123,18 +122,18 @@ impl MusicLibrary {
         }
 
         let mut index_writer = self.index.writer(200_000_000).expect("Writer failed");
-        
+
         let counter = AtomicUsize::new(0);
         let tx_ref = &tx;
         let counter_ref = &counter;
 
-        let _ : Vec<()> = paths
+        let _: Vec<()> = paths
             .into_par_iter()
             .filter_map(|p| {
                 let meta = crate::scanner::scan_track(&p)?;
-                
+
                 let term = Term::from_field_text(self.f_path, &meta.path);
-                index_writer.delete_term(term); 
+                index_writer.delete_term(term);
 
                 let mut doc = TantivyDocument::default();
                 doc.add_text(self.f_title, &meta.title);
@@ -146,7 +145,7 @@ impl MusicLibrary {
                 doc.add_u64(self.f_sample_rate, meta.sample_rate as u64);
                 doc.add_u64(self.f_bit_rate, meta.bit_rate as u64);
                 doc.add_u64(self.f_bit_depth, meta.bit_depth as u64);
-                
+
                 index_writer.add_document(doc).ok()?;
 
                 let current = counter_ref.fetch_add(1, Ordering::SeqCst) + 1;
@@ -158,9 +157,9 @@ impl MusicLibrary {
             .collect();
 
         index_writer.commit().expect("Commit failed");
-        
+
         self.reader.reload().expect("Reload failed");
-    
+
         let _ = tx.send(AppEvent::ScanFinished);
     }
     pub fn get_all_tracks(&self) -> Vec<TrackInfo> {
@@ -193,7 +192,7 @@ impl MusicLibrary {
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0) as u32,
                 album: doc
-                    .get_first(self.f_album) 
+                    .get_first(self.f_album)
                     .and_then(|v| v.as_str())
                     .unwrap_or("Unknown Album")
                     .to_string(),
@@ -225,10 +224,10 @@ impl MusicLibrary {
     }
 
     pub fn get_distinct_artists(&self) -> Vec<String> {
-        let tracks = self.get_all_tracks(); 
+        let tracks = self.get_all_tracks();
         let mut artists: Vec<String> = tracks.into_iter().map(|t| t.artist).collect();
         artists.sort();
-        artists.dedup(); 
+        artists.dedup();
         artists
     }
 
@@ -250,8 +249,15 @@ impl MusicLibrary {
 
     pub fn get_distinct_albums(&self) -> Vec<String> {
         let tracks = self.get_all_tracks();
-        let mut albums: Vec<String> = tracks.into_iter()
-            .map(|t| if t.album.is_empty() { "Unknown Album".into() } else { t.album })
+        let mut albums: Vec<String> = tracks
+            .into_iter()
+            .map(|t| {
+                if t.album.is_empty() {
+                    "Unknown Album".into()
+                } else {
+                    t.album
+                }
+            })
             .collect();
         albums.sort();
         albums.dedup();
@@ -260,8 +266,15 @@ impl MusicLibrary {
 
     pub fn get_distinct_genres(&self) -> Vec<String> {
         let tracks = self.get_all_tracks();
-        let mut genres: Vec<String> = tracks.into_iter()
-            .map(|t| if t.genre.is_empty() { "Unknown Genre".into() } else { t.genre })
+        let mut genres: Vec<String> = tracks
+            .into_iter()
+            .map(|t| {
+                if t.genre.is_empty() {
+                    "Unknown Genre".into()
+                } else {
+                    t.genre
+                }
+            })
             .collect();
         genres.sort();
         genres.dedup();
@@ -274,26 +287,42 @@ impl MusicLibrary {
         rates.sort();
         rates.dedup();
         // 通常显示为 XXX kbps
-        rates.into_iter().map(|r| format!("{} kbps", r / 1000)).collect()
+        rates
+            .into_iter()
+            .map(|r| format!("{} kbps", r / 1000))
+            .collect()
     }
 
-    pub fn get_tracks_by_category(&self, cat: &crate::types::Categories, val: &str) -> Vec<crate::types::TrackInfo> {
+    pub fn get_tracks_by_category(
+        &self,
+        cat: &crate::types::Categories,
+        val: &str,
+    ) -> Vec<crate::types::TrackInfo> {
         let tracks = self.get_all_tracks();
-        tracks.into_iter().filter(|t| {
-            match cat {
+        tracks
+            .into_iter()
+            .filter(|t| match cat {
                 crate::types::Categories::AlbumArtist => t.artist == val,
                 crate::types::Categories::Album => {
-                    let album_val = if t.album.is_empty() { "Unknown Album" } else { &t.album };
+                    let album_val = if t.album.is_empty() {
+                        "Unknown Album"
+                    } else {
+                        &t.album
+                    };
                     album_val == val
-                },
+                }
                 crate::types::Categories::Genre => {
-                    let genre_val = if t.genre.is_empty() { "Unknown Genre" } else { &t.genre };
+                    let genre_val = if t.genre.is_empty() {
+                        "Unknown Genre"
+                    } else {
+                        &t.genre
+                    };
                     genre_val == val
-                },
+                }
                 crate::types::Categories::SampleRate => format!("{} Hz", t.sample_rate) == val,
                 crate::types::Categories::BitRate => format!("{} kbps", t.bit_rate / 1000) == val,
                 crate::types::Categories::BitDepth => format!("{} Bit", t.bit_depth) == val,
-            }
-        }).collect()
+            })
+            .collect()
     }
 }
