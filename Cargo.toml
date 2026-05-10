@@ -12,6 +12,10 @@ version = "0.1.0"
 authors = ["Li2CO3ICU"]
 license = "AGPL-3.0-only"
 
+[lib]
+name = "liplayerpro_core"
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
 alsa = "0.7"
 ringbuf = "0.3"

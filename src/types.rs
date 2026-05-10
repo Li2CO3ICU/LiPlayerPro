@@ -8,8 +8,9 @@
 // -----------------------------------------------------------------------
 
 use crossterm::event::KeyEvent;
+use serde::Serialize;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct TrackInfo {
     pub title: String,
     pub artist: String,

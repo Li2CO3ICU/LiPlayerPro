@@ -71,8 +71,20 @@ impl AudioEngine {
     pub fn stop(&self) {
         let _ = self.cmd_sender.send(AudioCmd::Stop);
     }
+    pub fn pause(&self) {
+        self.is_paused.store(true, Ordering::Release);
+    }
+    pub fn resume(&self) {
+        self.is_paused.store(false, Ordering::Release);
+    }
+    pub fn paused(&self) -> bool {
+        self.is_paused.load(Ordering::Acquire)
+    }
     pub fn quit(&self) {
         let _ = self.cmd_sender.send(AudioCmd::Quit);
+    }
+    pub fn get_elapsed_millis(&self) -> u64 {
+        self.get_elapsed_duration().as_millis() as u64
     }
 
     pub fn get_elapsed_duration(&self) -> Duration {

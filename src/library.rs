@@ -11,7 +11,7 @@
 use crate::types::TrackInfo;
 use crate::config::LibraryConfig;
 use crate::scanner::scan_track;
-use crate::AppEvent;
+use crate::types::AppEvent;
 use rayon::prelude::*;
 use tantivy::time::format_description::well_known::iso8601::Config;
 use std::sync::atomic::{AtomicUsize, Ordering};
