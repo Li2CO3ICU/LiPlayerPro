@@ -8,15 +8,20 @@
 // -----------------------------------------------------------------------
 
 #![allow(dead_code, unused_variables)]
+#[cfg(feature = "native-alsa")]
+use alsa::pcm::{Access, Format, HwParams, PCM};
+#[cfg(feature = "native-alsa")]
 use alsa::{Direction, ValueOr};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use ringbuf::HeapRb;
 use std::io::Read;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
+    Arc,
+};
 use std::thread;
 use std::time::Duration;
-use alsa::pcm::{PCM, Format, Access, HwParams};
 
 pub enum AudioCmd {
     Play(String),
@@ -71,18 +76,30 @@ impl AudioEngine {
     pub fn stop(&self) {
         let _ = self.cmd_sender.send(AudioCmd::Stop);
     }
+    pub fn pause(&self) {
+        self.is_paused.store(true, Ordering::Release);
+    }
+    pub fn resume(&self) {
+        self.is_paused.store(false, Ordering::Release);
+    }
+    pub fn paused(&self) -> bool {
+        self.is_paused.load(Ordering::Acquire)
+    }
     pub fn quit(&self) {
         let _ = self.cmd_sender.send(AudioCmd::Quit);
+    }
+    pub fn get_elapsed_millis(&self) -> u64 {
+        self.get_elapsed_duration().as_millis() as u64
     }
 
     pub fn get_elapsed_duration(&self) -> Duration {
         let frames = self.current_pos.load(Ordering::Acquire);
         let rate = self.current_sample_rate.load(Ordering::Acquire);
-        
+
         if rate == 0 {
             return Duration::ZERO;
         }
-        
+
         // 🌟 提高精度：先乘后除，防止因为整数除法丢失不足 1 秒的部分
         Duration::from_millis((frames * 1000) / rate as u64)
     }
@@ -119,7 +136,7 @@ impl AudioEngine {
 
                     let pos_tracker_alsa = pos_tracker.clone();
                     let pause_alsa = is_paused.clone();
-                    
+
                     let rb = HeapRb::<i32>::new(2_097_152);
                     let (mut prod, mut cons) = rb.split();
 
@@ -188,7 +205,8 @@ impl AudioEngine {
                         })
                         .unwrap();
 
-                    let alsa_thread = thread::Builder::new()
+                    #[cfg(feature = "native-alsa")]
+                    let output_thread = thread::Builder::new()
                         .name("ALSA_Driver".into())
                         .spawn(move || {
                             while cons.len() < 80_000
@@ -215,24 +233,24 @@ impl AudioEngine {
                                 let mut local_buf = vec![0i32; 16384];
 
                                 while flag_alsa.load(Ordering::Acquire) {
-
-                                    // 🌟 核心休眠逻辑：优雅释放声卡并挂起
                                     if pause_alsa.load(Ordering::Acquire) {
-                                        let _ = pcm.drop(); // 安全丢弃缓存防止爆音
-                                        while pause_alsa.load(Ordering::Acquire) && flag_alsa.load(Ordering::Acquire) {
+                                        let _ = pcm.drop();
+                                        while pause_alsa.load(Ordering::Acquire)
+                                            && flag_alsa.load(Ordering::Acquire)
+                                        {
                                             thread::sleep(Duration::from_millis(50));
                                         }
-                                        let _ = pcm.prepare(); // 取消暂停时重新激活声卡
+                                        let _ = pcm.prepare();
                                         continue;
                                     }
-                                    
+
                                     let avail = cons.len();
                                     if avail >= 2 {
                                         let read_len = std::cmp::min(avail, local_buf.len());
                                         let read_len = read_len - (read_len % 2);
                                         let popped = cons.pop_slice(&mut local_buf[..read_len]);
                                         if popped > 0 {
-                                            if let Err(_) = io.writei(&local_buf[..popped]) {
+                                            if io.writei(&local_buf[..popped]).is_err() {
                                                 let _ = pcm.prepare();
                                             } else {
                                                 pos_tracker_alsa.fetch_add(
@@ -252,8 +270,36 @@ impl AudioEngine {
                         })
                         .unwrap();
 
+                    #[cfg(not(feature = "native-alsa"))]
+                    let output_thread = thread::Builder::new()
+                        .name("NoOp_Output".into())
+                        .spawn(move || {
+                            let mut local_buf = vec![0i32; 16384];
+                            while flag_alsa.load(Ordering::Acquire) {
+                                if pause_alsa.load(Ordering::Acquire) {
+                                    thread::sleep(Duration::from_millis(50));
+                                    continue;
+                                }
+                                let avail = cons.len();
+                                if avail >= 2 {
+                                    let read_len = std::cmp::min(avail, local_buf.len());
+                                    let read_len = read_len - (read_len % 2);
+                                    let popped = cons.pop_slice(&mut local_buf[..read_len]);
+                                    if popped > 0 {
+                                        pos_tracker_alsa
+                                            .fetch_add((popped / 2) as u64, Ordering::Relaxed);
+                                    }
+                                } else if eof_alsa.load(Ordering::Acquire) {
+                                    break;
+                                } else {
+                                    thread::sleep(Duration::from_micros(200));
+                                }
+                            }
+                        })
+                        .unwrap();
+
                     pipeline_threads.push(dec_thread);
-                    pipeline_threads.push(alsa_thread);
+                    pipeline_threads.push(output_thread);
                 }
                 Ok(AudioCmd::Stop) => {
                     play_flag.store(false, Ordering::Release);
@@ -297,6 +343,7 @@ impl AudioEngine {
         }
     }
 
+    #[cfg(feature = "native-alsa")]
     fn negotiate_alsa_rate(device_name: &str, target: u32) -> u32 {
         if let Ok(pcm) = PCM::new(device_name, Direction::Playback, false) {
             if let Ok(hwp) = HwParams::any(&pcm) {
@@ -306,5 +353,10 @@ impl AudioEngine {
             }
         }
         44100
+    }
+
+    #[cfg(not(feature = "native-alsa"))]
+    fn negotiate_alsa_rate(_device_name: &str, target: u32) -> u32 {
+        target
     }
 }
